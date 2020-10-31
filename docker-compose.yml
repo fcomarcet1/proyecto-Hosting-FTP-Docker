@@ -1,0 +1,200 @@
+version: '3'
+
+networks:
+  mynetwork:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+volumes:
+    persistent:        
+
+services:
+  mysql:
+    build:
+      context: ./docker/mysql
+      args:
+        mysql_version: ${MYSQL_VERSION}
+    
+    container_name: mysql
+    env_file:
+     - ./docker/env/variables.env
+    volumes:
+      -  ./volumen/mysql:/var/lib/mysql
+      #- ./volumen/mysql/mysqlrun:/run/mysqld
+      #- ./docker/mysql:/docker-entrypoint-initdb.d
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Europe/Madrid
+    ports:
+      - "3306:3306"
+    restart: always
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.6
+    
+
+  webapp:
+    build:
+      context: ./docker/php
+      args:
+        php_version: ${PHP_VERSION}
+    container_name: webapp
+    env_file:
+     - ./docker/env/variables.env
+    ports:
+      - "${PHP_PORT}:80"
+    volumes:
+      - ./www:/var/www/html
+    links:
+      - mysql
+    depends_on:
+      - mysql  
+    #environment:
+      #APACHE_RUN_USER: ${APACHE_RUN_USER}
+      #APACHE_RUN_GROUP: ${APACHE_RUN_GROUP}
+      #APACHE_LOG_DIR: ${APACHE_LOG_DIR}
+      #APACHE_PID_FILE: ${APACHE_PID_FILE}
+      #APACHE_RUN_DIR: ${APACHE_RUN_DIR}
+      #APACHE_LOCK_DIR: ${APACHE_LOCK_DIR}
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.7
+
+  phpmyadmin:
+    build:
+      context: ./docker/phpmyadmin
+      #args:
+        #phpmyadmin_version: ${PHP_VERSION}
+    #image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    env_file:
+     - ./docker/env/variables.env
+    ports:
+      - 8001:80
+    links: 
+      - mysql:mysql
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./volumen/phpmyadmin/sessions:/sessions
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.8
+
+  webserver:
+    build:
+      context: ./docker/webserver
+      args:
+        php_version: ${PHP_VERSION}
+    container_name: webserver
+    env_file:
+     - ./docker/env/variables.env
+    ports:
+      - 81:80
+    restart: always
+    #extra_hosts:
+      #- "myhost.name:127.0.0.1"  
+    volumes:
+      #volumen para dir sitios web
+      - ./volumen/webserver/misitios:/var/www/html
+      #volumen para dir copia hosts
+      - ./docker/webserver/hosts.d:/etc/extrahosts.d/hosts.d
+      #volumen para scripts 
+      #- ./docker/webserver/remove_hosts.sh:/opt/provisioning
+       #volumen para scripts 
+      #- ./docker/webserver/remove_hostsd.sh:/opt/provisioning
+      #volumen persistent /etc
+      - persistent:/etc
+      #volumen para conf defecto sitios web
+      - ./docker/webserver/www.conf:/etc/apache2/www.conf
+      #volumen para conf VHosts 
+      - ./docker/webserver/sites-available:/etc/apache2/sites-available
+      #volumen para sites-enabled 
+      - ./docker/webserver/sites-enabled:/etc/apache2/sites-enabled
+      #volumen para archivos provisioning
+      - ./docker/webserver/provisioning:/opt/provisioning
+      #volumen para archivos conexion provisioning
+      #- ./docker/webserver/provisioning/lib:/opt/provisioning/conexiones
+      #volumen para archivos funciones provisioning
+      - ./docker/webserver/provisioning/lib:/opt/provisioning/lib
+      #volumen para archivos logs provisioning
+      #- ./docker/webserver/provisioning/logs:/opt/provisioning/logs
+      #volumen php provisioning
+      - ./docker/webserver/provisioning/provisioningVhosts.php:/opt/provisioning/provisioningVhosts.php
+      #- ./www:/var/www/html
+    links:
+      - mysql
+      - webapp
+      #- proftp
+    depends_on:
+      - mysql
+    environment:
+      APACHE_RUN_USER: ${APACHE_RUN_USER}
+      APACHE_RUN_GROUP: ${APACHE_RUN_GROUP}
+      APACHE_LOG_DIR: ${APACHE_LOG_DIR}
+      APACHE_PID_FILE: ${APACHE_PID_FILE}
+      APACHE_RUN_DIR: ${APACHE_RUN_DIR}
+      APACHE_LOCK_DIR: ${APACHE_LOCK_DIR}
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.10      
+
+  proftp:
+    build:
+      context: ./docker/proftpd
+      args:
+        php_version: ${PHP_VERSION}
+    container_name: proftpd
+    env_file:
+     - ./docker/env/variables.env
+    restart: always
+    links:
+      - mysql
+      - webapp
+      - webserver
+    #hostname: ftpserver
+    environment:
+      APACHE_RUN_USER: ${APACHE_RUN_USER}
+      APACHE_RUN_GROUP: ${APACHE_RUN_GROUP}
+      APACHE_LOG_DIR: ${APACHE_LOG_DIR}
+      APACHE_PID_FILE: ${APACHE_PID_FILE}
+      APACHE_RUN_DIR: ${APACHE_RUN_DIR}
+      APACHE_LOCK_DIR: ${APACHE_LOCK_DIR}
+      #FTP_LIST: "ftpuser:ftpuser"
+    ports:
+      - 20:20
+      - 21:21
+      - 20020-20080:20020-20080
+      - 90:80
+    volumes:
+      #volumen para dir usuarios ftp mapeado a webserver para compartir directorio
+      - ./volumen/webserver/misitios:/srv/ftpusers
+      #volumen fichero conf usuarios ftp
+      - ./docker/proftpd/proftpd.conf:/usr/local/etc/proftpd.conf
+      #volumen para fichero usuarios/passwd ftp
+      - ./docker/proftpd/ftpd.passwd:/etc/proftpd/ftpd.passwd
+      #volumen para fichero grupos/passwd ftp
+      - ./docker/proftpd/ftpd.group:/etc/proftpd/ftpd.group
+      #volumen para shell(/bin/false) usuarios ftp
+      - ./docker/proftpd/bin/shells:/etc/shells
+      #volumen para archivos provisioning
+      - ./docker/proftpd/provisioning:/opt/provisioning
+      #volumen para archivos conexion provisioning
+      #- ./docker/proftpd/provisioning/lib:/opt/provisioning/conexiones
+      #volumen para archivos funciones provisioning
+      #- ./docker/proftpd/provisioning/lib:/opt/provisioning/lib
+      #volumen para archivos logs provisioning
+      #- ./docker/proftpd/provisioning/logs:/opt/provisioning/logs
+      #volumen php provisioning
+      #- ./docker/proftpd/provisioning/provisioningFtp.php:/opt/provisioning/provisioningFtp.php
+      #- ./www:/var/www/html    
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.9  
+    
+    

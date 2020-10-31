@@ -1,0 +1,19 @@
+1- crear fichero .env en directorio proyecto_dockerXXX con el contenido de env.txt
+
+2- nos situamos dentro  del directorio hosting_docker 
+
+3- docker-compose build (es necesario ejecutar como usuario root todos los cmds)
+
+4- levantar servicio: docker-compose -d up
+
+5-  Appweb-> localhost:8080 // 172.20.0.7:8080
+    Servidor Mysql->172.20.0.6:3306
+    PhpMyadmin->localhost:8001 // 172.20.0.8:8001
+        user:fran
+        pass:fran
+    Webserver(VHosts)->localhost:8081 // 172.20.0.10:8081
+    Proftpd-> 172.20.0.9:21 22 20020-20080
+
+6- entrar dentro contenedor en marcha:docker exec -ti <nombre_contenedor/Id> /bin/bash 
+
+7- detener el servicio: docker-compose down
